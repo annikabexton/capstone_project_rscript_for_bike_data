@@ -1,0 +1,268 @@
+# This is the RScript I used to analyze 2024 data from the Cyclistic Bike Company as part of the Google Data Analytics Capstone Project. 
+
+
+#=====================
+# STEP 1: COLLECT DATA
+#=====================
+library(tidyverse)  #calculations
+library(lubridate)  #dates
+library(hms)  #time
+library(data.table)  #exporting data frame
+library(dplyr)  #
+
+# # Upload Divvy datasets (csv files) here
+td_202401 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202401-divvy-tripdata/202401-divvy-tripdata.csv")
+td_202402 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202402-divvy-tripdata/202402-divvy-tripdata.csv")
+td_202403 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202403-divvy-tripdata/202403-divvy-tripdata.csv")
+td_202404 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202404-divvy-tripdata/202404-divvy-tripdata.csv")
+td_202405 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202405-divvy-tripdata/202405-divvy-tripdata.csv")
+td_202406 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202406-divvy-tripdata/202406-divvy-tripdata.csv")
+td_202407 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202407-divvy-tripdata/202407-divvy-tripdata.csv")
+td_202408 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202408-divvy-tripdata/202408-divvy-tripdata.csv")
+td_202409 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202409-divvy-tripdata/202409-divvy-tripdata.csv")
+td_202410 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202410-divvy-tripdata/202410-divvy-tripdata.csv")
+td_202411 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202411-divvy-tripdata/202411-divvy-tripdata.csv")
+td_202412 <- read.csv("C:/Users/Annika/Desktop/Cyclistic_Bike_Trip_Data/202412-divvy-tripdata/202412-divvy-tripdata.csv")
+
+
+#====================================================
+# STEP 2: WRANGLE DATA AND COMBINE INTO A SINGLE FILE
+#====================================================
+# Compare column names each of the files
+# While the names don't have to be in the same order, they DO need to match perfectly before we can use a command to join them into one file
+colnames(td_202401)
+colnames(td_202402)
+colnames(td_202403)
+colnames(td_202404)
+colnames(td_202405)
+colnames(td_202406)
+colnames(td_202407)
+colnames(td_202408)
+colnames(td_202409)
+colnames(td_202410)
+colnames(td_202411)
+colnames(td_202412)
+
+# Inspect the dataframes and look for incongruencies
+str(td_202401)
+str(td_202402)
+str(td_202403)
+str(td_202404)
+str(td_202405)
+str(td_202406)
+str(td_202407)
+str(td_202408)
+str(td_202409)
+str(td_202410)
+str(td_202411)
+str(td_202412)
+
+# Stack individual quarter's data frames into one big data frame
+all_trips <- bind_rows(td_202401, td_202402, td_202403, td_202404, td_202405, td_202406, td_202407, td_202408, td_202409, td_202410, td_202411, td_202412)
+
+# remove individual month data frames to clear up space in the enviornment
+remove(td_202401, td_202402, td_202403, td_202404, td_202405, td_202406, td_202407, td_202408, td_202409, td_202410, td_202411, td_202412)
+
+
+#======================================================
+# STEP 3: CLEAN UP AND ADD DATA TO PREPARE FOR ANALYSIS
+#======================================================
+# STEP 3A: BASIC FIXES
+# Inspect the new table that has been created
+colnames(all_trips)  #List of column names
+nrow(all_trips)  #How many rows are in data frame?
+dim(all_trips)  #Dimensions of the data frame?
+head(all_trips)  #See the first 6 rows of data frame.  Also tail(all_trips)
+str(all_trips)  #See list of columns and data types (numeric, character, etc)
+summary(all_trips)  #Statistical summary of data. Mainly for numerics
+
+# Fix basic things
+all_trips <- na.omit(all_trips)  #remove rows with NA values
+all_trips <- distinct(all_trips)  #remove duplicate rows
+
+# Remove unnecessary columns 
+all_trips <- all_trips %>%  
+  select(-c(ride_id, start_station_id, end_station_id, start_lat, start_lng, end_lat, end_lng))
+
+
+# STEP 3B: REMOVING BAD DATA
+# Create a column called "ride_length" and fill it with the calculation that subtracts "started_at" from "ended_at"
+# Unit is minutes
+all_trips$ride_length <- difftime(all_trips$ended_at, all_trips$started_at, units = "mins")
+
+# Check if "ride_length" is numeric or not
+# Convert "ride_length" to numeric so we can run calculations on the data
+is.numeric(all_trips$ride_length)
+all_trips$ride_length <- as.numeric(as.character(all_trips$ride_length))
+is.numeric(all_trips$ride_length)
+
+# Order the data set by "ride_length" 
+all_trips <- all_trips[order(all_trips$ride_length),]  #check ride lengths by viewing them in increasing order (the default order)
+
+# Since we found trips where ride_length was 0 or negative, let's remove them
+# Since we are removing data, lets make a new data set (v2)
+all_trips_v2 <- all_trips[!(all_trips$ride_length<=0),] #remove trips where ride_length was negative and assign to a new dataframe (v2)
+### This resulted in ~725 enteries being removed (our of our approximate 5.8 million, that is less than 0.0001%)
+
+# Remove entries when bikes were taken out of docks and checked for quality by Divvy
+# We will create a new version of the dataframe (v3) since data is being removed again
+# After viewing the tables, you will see there are no such stations and thus no calculation is needed here...but we checked for it!
+### start_table <- table(all_trips_v2$start_station_name)  #check start_station_names
+### View(start_table)
+### end_table <- table(all_trips_v2$end_station_name)  #check end_station_names
+### View(end_table)
+# Since we actually did NOT find a station named "HQ QR" or anything similar.
+
+
+# STEP 3C: EXPANDING AND CREATING ALL OUR VARIABLES 
+# Expand some columns
+# Add columns that list the date, day of week, month, day, year, full time (HH:MM:SS), and hour of each ride
+all_trips_v2$date <- as.Date(all_trips_v2$started_at) #The default format is yyyy-mm-dd
+all_trips_v2$day_of_week <- wday(all_trips_v2$started_at)  #calculate the day of the week
+all_trips_v2$day_of_week <- format(as.Date(all_trips_v2$date), "%A")  #create a column for day of the week
+all_trips_v2$month <- format(as.Date(all_trips_v2$date), "%m")  #create a column for month
+all_trips_v2$day <- format(as.Date(all_trips_v2$date), "%d")  #create a column for day
+all_trips_v2$year <- format(as.Date(all_trips_v2$date), "%Y")  #create a column for year
+all_trips_v2$time <- format(as.POSIXct(all_trips_v2$started_at), format = "%H:%M:%S")  #create a new column for time
+all_trips_v2$hour <- format(as.POSIXct(all_trips_v2$started_at), format = "%H")  #create a new column for hour
+
+#Expand columns further
+#Add even more descriptive labels to the data such as season and time_of_day
+#create a column called "season" and assign based on month: Winter, Spring, Summer, or Fall
+all_trips_v2 <- all_trips_v2 %>% mutate(season = 
+                                          case_when(month == "01" ~ "Winter",
+                                                    month == "02" ~ "Winter",
+                                                    month == "03" ~ "Spring",
+                                                    month == "04" ~ "Spring",
+                                                    month == "05" ~ "Spring",
+                                                    month == "06" ~ "Summer",
+                                                    month == "07" ~ "Summer",
+                                                    month == "08" ~ "Summer",
+                                                    month == "09" ~ "Fall",
+                                                    month == "10" ~ "Fall",
+                                                    month == "11" ~ "Fall",
+                                                    month == "12" ~ "Winter"))
+
+# Create a column called "time_of_day" and assign based on hour: Night, Morning, Afternoon, or Evening
+all_trips_v2 <- all_trips_v2 %>% mutate(time_of_day = 
+                                          case_when(hour == "00" ~ "Night",
+                                                    hour == "01" ~ "Night",
+                                                    hour == "02" ~ "Night",
+                                                    hour == "03" ~ "Night",
+                                                    hour == "04" ~ "Night",
+                                                    hour == "05" ~ "Night",
+                                                    hour == "06" ~ "Morning",
+                                                    hour == "07" ~ "Morning",
+                                                    hour == "08" ~ "Morning",
+                                                    hour == "09" ~ "Morning",
+                                                    hour == "10" ~ "Morning",
+                                                    hour == "11" ~ "Morning",
+                                                    hour == "12" ~ "Afternoon",
+                                                    hour == "13" ~ "Afternoon",
+                                                    hour == "14" ~ "Afternoon",
+                                                    hour == "15" ~ "Afternoon",
+                                                    hour == "16" ~ "Afternoon",
+                                                    hour == "17" ~ "Afternoon",
+                                                    hour == "18" ~ "Evening",
+                                                    hour == "19" ~ "Evening",
+                                                    hour == "20" ~ "Evening",
+                                                    hour == "21" ~ "Evening",
+                                                    hour == "22" ~ "Evening",
+                                                    hour == "23" ~ "Evening"))
+#View the final data
+View(all_trips_v2)
+
+
+#=====================================
+# STEP 4: CONDUCT DESCRIPTIVE ANALYSIS
+#=====================================
+# STEP 4A: RUN BASIC DESCRIPTIVE STATISTICS
+# Total number of rides
+nrow(all_trips_v2)
+# Total number of rides of members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(member_casual)
+
+# Average ride length
+mean(all_trips_v2$ride_length)
+# Average ride length of members vs casual riders
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = mean)
+
+# STEP 4B: RUN ADDITIONAL STATISTICS
+# Type of bike for rides of members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(rideable_type)
+
+# Hour of day of rides of members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(hour)
+# Time of day of members vs casual riders
+## Add colors to this visualization to further classify the time of day in different colors
+all_trips_v2$time_of_day <- ordered(all_trips_v2$time_of_day, levels=c("Morning", "Afternoon", "Evening", "Night"))
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(time_of_day)
+
+# Day of the week of rides of members vs casual riders
+all_trips_v2$day_of_week <- ordered(all_trips_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(day_of_week)
+
+# Month of rides of members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(month)
+# Season of rides of members vs casual riders
+## Add colors to this visualization to further classify the season in different colors
+all_trips_v2$season <- ordered(all_trips_v2$season, levels=c("Spring", "Summer", "Fall", "Winter"))
+all_trips_v2 %>%
+  group_by(member_casual) %>%
+  count(season)
+  
+
+#=====================================
+# STEP 5: VISUALIZATIONS
+#=====================================
+# Number of rides by rideable type (bike type)
+all_trips_v2 %>%
+  group_by(member_casual, rideable_type) %>%
+  summarise(number_of_rides = n()) %>%
+  arrange(member_casual, rideable_type) %>%
+  ggplot(aes(x= rideable_type, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")
+
+# Number of rides by hour by members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual, hour) %>%
+  summarise(number_of_rides = n()) %>%
+  arrange(member_casual, hour) %>%
+  ggplot(aes(x= hour, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")
+
+# Number of rides by day of the week by members vs casual riders
+all_trips_v2 %>% 
+  group_by(member_casual, day_of_week) %>%  #groups by usertype and day of the week
+  summarise(number_of_rides = n()) %>%     #calculates the number of rides
+  arrange(member_casual, day_of_week)  %>%         #sorts
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = member_casual)) +     #creates a visualization showing number of riders by rider type
+  geom_col(position = "dodge")
+
+# Number of rides by month by members vs casual riders
+all_trips_v2 %>%
+  group_by(member_casual, month) %>%
+  summarise(number_of_rides = n()) %>%
+  arrange(member_casual, month) %>%
+  ggplot(aes(x = month, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")
+
+
+#=================================================
+# STEP 6: EXPORT SUMMARY FILE FOR FURTHER ANALYSIS
+#=================================================
+# Create a csv file that we will visualize in Tableau
+write.csv(all_trips_v2, file = "C:\\Users\\Annika\\Documents\\R\\bike_data.csv", row.names = TRUE)
+
